@@ -7,8 +7,6 @@ import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
 import android.text.TextUtils;
-import android.util.Log;
-import android.widget.TextView;
 
 import java.io.File;
 import java.io.IOException;
@@ -32,30 +30,30 @@ public class ProxyApplication extends Application {
 
     private String app_name;
     private String app_version;
+    private boolean isNeedLoadDex;
 
 
     @Override
     protected void attachBaseContext(Context base) {
         super.attachBaseContext(base);
         getMetaData();
-        Log.v("sunxy", "app_name: " + app_name );
-        Log.v("sunxy", "app_version: " + app_version );
+
+        if (!isNeedLoadDex){
+            return;
+        }
 
         //获取当前APK文件
         File apkFile = new File(getApplicationInfo().sourceDir);
-        Log.v("sunxy", "apkFile: " + apkFile.getAbsolutePath() );
         // apk 文件减压到 appDir这个目录
-        File rootFile = getDir(app_name, MODE_PRIVATE);
-        File versionDir = new File(rootFile, app_version);
-        Log.v("sunxy", "versionDir: " + versionDir.getAbsolutePath() );
+        File rootDir = getDir(app_name, MODE_PRIVATE);
+        File versionDir = new File(rootDir, app_version);
         File appDir = new File(versionDir, "app");
         //提取apk中需要解密的所有dex文件放入这个目录。
         File dexDir = new File(versionDir, "dexDir");
-        //
+        //存储需要插入的dex
         List<File> dexFiles = new ArrayList<>();
         // 如果dexDir不存在或者里面没东西，则去解压
         if (!dexDir.exists() || dexDir.list().length == 0){
-            Log.v("sunxy", "没有解压过 ");
             //把apk解压 到 appDir
             Zip.upSip(apkFile, appDir);
             //获取目录下文件
@@ -76,10 +74,8 @@ public class ProxyApplication extends Application {
                 }
             }
             //将dexFiles中的文件拷贝到dexDir中
-            Log.v("sunxy", "准备copy size: " + dexFiles.size());
             Utils.copy(dexFiles, dexDir);
         }else{
-            Log.v("sunxy", "已经解压过了 " + dexDir.listFiles().length);
             //已经解压过了
             Collections.addAll(dexFiles,  dexDir.listFiles());
         }
@@ -134,8 +130,8 @@ public class ProxyApplication extends Application {
          */
         Object[] newElements = (Object[]) Array.newInstance(dexElements.getClass().getComponentType(),
                 dexElements.length + addElements.length);
-        System.arraycopy(dexElements, 0, newElements, 0, dexElements.length);
-        System.arraycopy(addElements, 0, newElements, dexElements.length, addElements.length);
+        System.arraycopy(addElements, 0, newElements, 0, addElements.length);
+        System.arraycopy(dexElements, 0, newElements, addElements.length, dexElements.length);
         /**
          * 4  替换classLoader中的element数组
          */
@@ -161,5 +157,6 @@ public class ProxyApplication extends Application {
         } catch (PackageManager.NameNotFoundException e) {
             e.printStackTrace();
         }
+        isNeedLoadDex = !TextUtils.isEmpty(app_name) && !TextUtils.isEmpty(app_version);
     }
 }
