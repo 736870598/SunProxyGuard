@@ -228,7 +228,7 @@ public class ProxyApplication extends Application {
         //创建目标application
         Class<?> delegateClass = Class.forName(app_name);
         Application app = (Application) delegateClass.newInstance();
-        //反正执行attach函数，该函数在源码中被 @hide 注解修饰，9.0能行吗？
+        //反射执行attach函数，该函数在源码中被 @hide 注解修饰，9.0能行吗？能
         Method attach = Utils.findMethod(app, "attach", Context.class);
         attach.invoke(app, baseContext);
 

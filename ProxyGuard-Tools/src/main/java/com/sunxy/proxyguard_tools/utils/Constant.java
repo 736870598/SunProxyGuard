@@ -8,8 +8,8 @@ package com.sunxy.proxyguard_tools.utils;
 public final class Constant {
 
     //aar文件地址
-    public static final String AAR_NAME = "ProxyGuard-Core/build/outputs/aar/ProxyGuard-Core-debug.aar";
-//    public static final String AAR_NAME = "ProxyGuard-Tools/aar/ProxyGuard-Core-debug.aar";
+//    public static final String AAR_NAME = "ProxyGuard-Core/build/outputs/aar/ProxyGuard-Core-debug.aar";
+    public static final String AAR_NAME = "ProxyGuard-Tools/aar/ProxyGuard-Core-debug.aar";
 
     //待处理的apk的路径
 //    public static final String APK_NAME = "ProxyGuard-Tools/out/app-debug.apk";
