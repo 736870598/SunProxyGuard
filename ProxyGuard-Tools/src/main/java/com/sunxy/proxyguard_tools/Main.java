@@ -71,7 +71,7 @@ public class Main {
         Zip.zip(apkTemp, unSignedApk);
 
         /**
-         * 4. 签名与对齐
+         * 4. 对齐与签名
          */
         //4.1 对齐
         File alignedApk = new File("ProxyGuard-Tools/temp/app-unsigned-aligned.apk");
@@ -85,7 +85,7 @@ public class Main {
         //4.2 签名
         File signedApk = new File("ProxyGuard-Tools/out/app-signed-aligned.apk");
         File jks = new File(Constant.JSK_NAME);
-        process = Runtime.getRuntime().exec("cmd /c apksigner sign  --ks " +
+        process = Runtime.getRuntime().exec("cmd /c apksigner sign --ks " +
                 jks.getAbsolutePath() + " --ks-key-alias " +
                 Constant.KS_KEY_ALIAS +
                 " --ks-pass pass:" +

@@ -32,6 +32,8 @@ public class ProxyApplication extends Application {
     private String app_version;
     private boolean isNeedLoadDex;
 
+    Application delegate;
+
 
     @Override
     protected void attachBaseContext(Context base) {
@@ -93,6 +95,66 @@ public class ProxyApplication extends Application {
         }
     }
 
+    @Override
+    public String getPackageName() {
+        //如果有ContentProvider，则ContentProvider会在调用application的onCreate之前就
+        //使用的获取content，但是content那是还没有被替换成目标的content
+        // 这里返回空则会调用application.createPackageContext方法获取content
+        if (isNeedLoadDex){
+            return "";
+        }
+        return super.getPackageName();
+    }
+
+    @Override
+    public Context createPackageContext(String packageName, int flags) throws PackageManager.NameNotFoundException {
+        if (!isNeedLoadDex){
+            return super.createPackageContext(packageName, flags);
+        }
+        try {
+            bindRealApplication();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        if (delegate == null){
+            return super.createPackageContext(packageName, flags);
+        }
+        return delegate;
+    }
+
+    @Override
+    public void onCreate() {
+        super.onCreate();
+        try {
+            bindRealApplication();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+
+    /**
+     * 获取用户在androidManifest.xml中配置的信息
+     */
+    public void getMetaData() {
+        try {
+            ApplicationInfo applicationInfo = getPackageManager()
+                    .getApplicationInfo(getPackageName(), PackageManager.GET_META_DATA);
+            Bundle metaData = applicationInfo.metaData;
+            if (null != metaData){
+                if(metaData.containsKey(Conts.APP_NAME)){
+                    app_name = metaData.getString(Conts.APP_NAME);
+                }
+                if (metaData.containsKey(Conts.APP_VERSION)) {
+                    app_version = metaData.get(Conts.APP_VERSION).toString();
+                }
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            e.printStackTrace();
+        }
+        isNeedLoadDex = !TextUtils.isEmpty(app_name) && !TextUtils.isEmpty(app_version);
+    }
+
     /**
      * 加载dex
      */
@@ -139,24 +201,82 @@ public class ProxyApplication extends Application {
     }
 
     /**
-     * 获取用户在androidManifest.xml中配置的信息
+     * 替换application
+     *
+     *
+     Application创建出来后 给到了以下对象的以下成员：
+     ContextImpl -> mOuterContext ProxyApplication
+     ActivityThread -> mAllApplications(ArrayList) ProxyApplication
+     ActivityThread -> mInitialApplication ProxyApplication
+     LoadedApk -> mApplication ProxyApplication
+     *
      */
-    public void getMetaData() {
-        try {
-            ApplicationInfo applicationInfo = getPackageManager()
-                    .getApplicationInfo(getPackageName(), PackageManager.GET_META_DATA);
-            Bundle metaData = applicationInfo.metaData;
-            if (null != metaData){
-                if(metaData.containsKey(Conts.APP_NAME)){
-                    app_name = metaData.getString(Conts.APP_NAME);
-                }
-                if (metaData.containsKey(Conts.APP_VERSION)) {
-                    app_version = metaData.get(Conts.APP_VERSION).toString();
-                }
-            }
-        } catch (PackageManager.NameNotFoundException e) {
-            e.printStackTrace();
+    private void bindRealApplication() throws ClassNotFoundException,
+            IllegalAccessException, InstantiationException, NoSuchMethodException,
+            InvocationTargetException, NoSuchFieldException {
+        if (!isNeedLoadDex){
+            return;
         }
-        isNeedLoadDex = !TextUtils.isEmpty(app_name) && !TextUtils.isEmpty(app_version);
+
+        if (delegate != null){
+            return;
+        }
+
+        //这个就是attachBaseContext传进来的 ContextImpl
+        Context baseContext = getBaseContext();
+
+        //创建目标application
+        Class<?> delegateClass = Class.forName(app_name);
+        Application app = (Application) delegateClass.newInstance();
+        //反正执行attach函数，该函数在源码中被 @hide 注解修饰，9.0能行吗？
+        Method attach = Utils.findMethod(app, "attach", Context.class);
+        attach.invoke(app, baseContext);
+
+        /**
+         * 替换 ContextImpl -> mOuterContext
+         */
+        Field mOuterContextField = Utils.findField(baseContext, "mOuterContext");
+        mOuterContextField.set(baseContext, app);
+
+
+        /**
+         *  获得ActivityThread对象 ActivityThread
+         *  可以通过 ContextImpl 的 mMainThread 属性获得
+         */
+        Field mMainThreadField = Utils.findField(baseContext, "mMainThread");
+        Object mMainThread = mMainThreadField.get(baseContext);
+
+        /**
+         *  替换 ActivityThread -> mInitialApplication
+         */
+        Field mInitialApplicationField = Utils.findField(mMainThread, "mInitialApplication");
+        mInitialApplicationField.set(mMainThread, app);
+
+        /**
+         * 替换 ActivityThread -> mAllApplications(ArrayList)
+         */
+        Field mAllApplicationsField = Utils.findField(mMainThread, "mAllApplications");
+        ArrayList<Application> mAllApplications = (ArrayList<Application>) mAllApplicationsField.get(mMainThread);
+        mAllApplications.remove(this);
+        mAllApplications.add(app);
+
+        /**
+         * 替换 LoadedApk -> mApplication
+         */
+        Field mPackageInfoField = Utils.findField(baseContext, "mPackageInfo");
+        Object mPackageInfo = mPackageInfoField.get(baseContext);
+        Field mApplicationField = Utils.findField(mPackageInfo, "mApplication");
+        mApplicationField.set(mPackageInfo, app);
+
+        /**
+         * 修改ApplicationInfo 的 className，LoadedApk
+         *
+         */
+        Field mApplicationInfoField = Utils.findField(mPackageInfo, "mApplicationInfo");
+        ApplicationInfo mApplicationInfo = (ApplicationInfo) mApplicationInfoField.get(mPackageInfo);
+        mApplicationInfo.className = app_name;
+
+        delegate = app;
+        delegate.onCreate();
     }
 }
